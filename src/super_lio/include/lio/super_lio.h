@@ -20,18 +20,38 @@
 #include "ESKF.h"
 #include "OctVoxMap/OctVoxMap.hpp"
 #include "OctVoxMap/VoxelGridFilter.h"
+
+#ifdef USE_ROS_WRAPPER
 #include "ros/ROSWrapper.h"
+#endif
 
 namespace LI2Sup{
+
+/// Base class for data wrapper interface
+class DataWrapperBase {
+public:
+  using Ptr = std::shared_ptr<DataWrapperBase>;
+  virtual ~DataWrapperBase() = default;
+  virtual bool sync_measure(MeasureGroup&) = 0;
+  virtual void pub_odom(const NavState&) {}
+  virtual void pub_cloud_world(const BASIC::CloudPtr&, double) {}
+  virtual void setESKF(ESKF::Ptr&) {}
+};
 
 class SuperLIO{
 public:
   SuperLIO(){};
   ~SuperLIO(){};
 
+#ifdef USE_ROS_WRAPPER
   void setROSWrapper(const ROSWrapper::Ptr& wrapper){
     data_wrapper_ = wrapper;
   }
+#else
+  void setDataWrapper(const DataWrapperBase::Ptr& wrapper){
+    data_wrapper_ = wrapper;
+  }
+#endif
   virtual void init();
   void process();
   void saveMap();
@@ -58,9 +78,14 @@ protected:
   ESKF::Ptr kf_;
   OctVoxMapType::Ptr ivox_;
   VoxelGridClosest<BASIC::PointType> voxel_grid_fliter_;
-  ROSWrapper::Ptr data_wrapper_;
-  MeasureGroup measures_;
   
+#ifdef USE_ROS_WRAPPER
+  ROSWrapper::Ptr data_wrapper_;
+#else
+  DataWrapperBase::Ptr data_wrapper_;
+#endif
+  MeasureGroup measures_;
+
   bool flg_init_ = false;
   bool flg_first_scan_ = true;
   std::vector<DynamicState> propagate_states_;

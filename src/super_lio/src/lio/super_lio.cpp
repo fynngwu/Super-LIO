@@ -1,5 +1,6 @@
 
 #include "lio/super_lio.h"
+#include "basic/logs.h"
 
 #include <sys/resource.h>
 #include <tbb/parallel_for.h>

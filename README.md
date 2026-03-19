@@ -83,6 +83,66 @@ ros2 launch super_lio relocation.py
 ```
 
 
+## Offline Processing
+
+Super-LIO supports offline processing mode, allowing you to run SLAM directly on ROS2 bag files without launching ROS nodes. This is useful for algorithm testing and evaluation.
+
+### Features
+
+- Direct ROS2 bag loading without ROS node dependency
+- Outputs trajectory in TUM format
+- Supports all LiDAR types (Livox, Velodyne, Ouster, Hesai, etc.)
+- Independent CMake build system
+
+### Build
+
+```bash
+cd Super-LIO/src/offline
+./build.sh
+```
+
+### Usage
+
+```bash
+cd Super-LIO/src/offline
+./build/run_offline --input_bag=<bag_path> --config=config/offline.yaml
+```
+
+### Output
+
+- **Trajectory**: Saved to `trajectory.txt` in TUM format (timestamp tx ty tz qx qy qz qw)
+- **Map**: Saved to the directory specified in config (if `save_map` is enabled)
+
+### Configuration
+
+The offline config file is located at `src/offline/config/offline.yaml`. Key parameters:
+
+```yaml
+lio:
+  ros:
+    lidar_topic: "/livox/lidar"
+    imu_topic: "/livox/imu"
+  
+  sensor:
+    lidar_type: 1  # 1=Livox, 2=Velodyne16, 3=Velodyne32, 4=Ouster, 5=Hesai, 6=NCLT
+    blind: 2.0
+    maxrange: 60.0
+  
+  map:
+    save_map: false
+    save_map_dir: "map"
+```
+
+### Example
+
+```bash
+# Run with Livox bag
+./build/run_offline --input_bag=/path/to/livox_bag --config=config/offline.yaml
+
+# Output:
+# ---> Trajectory saved to: trajectory.txt (1167 poses)
+```
+
 ## Datasets
 <p align="center">
   <img src="docs/datasets_compressed.png" width="95%">

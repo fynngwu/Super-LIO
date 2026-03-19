@@ -118,6 +118,8 @@ struct IMUData{
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
+using IMUDataPtr = std::shared_ptr<IMUData>;
+
 
 struct LidarData
 {
