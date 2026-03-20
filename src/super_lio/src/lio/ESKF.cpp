@@ -304,8 +304,45 @@ bool ESKF::UpdateObserve(ESKF::ObsFunc obs) {
   P_ = Pk;
 
   dx_.setZero();
-  
+
   last_obs_time_ = current_obs_time_;
+  return true;
+}
+
+
+bool ESKF::UpdatePointPoseOnly(const Eigen::Matrix<BASIC::scalar, 1, 6>& H_pose, const BASIC::scalar residual) {
+  // K = P * H^T * (H * P * H^T + R)^-1
+  // Only use first 6 columns of P since H only affects pose (first 6 states)
+  Eigen::Matrix<BASIC::scalar, 18, 1> PHt = P_.template block<18, 6>(0, 0) * H_pose.transpose();
+  constexpr BASIC::scalar noise_var = 0.001;
+  BASIC::scalar S = (H_pose * PHt.template block<6, 1>(0, 0))(0, 0) + noise_var;
+  if (S < 1e-12) {
+    return false;
+  }
+
+  Eigen::Matrix<BASIC::scalar, 18, 1> K = PHt / S;
+
+  // State update: dx = K * residual
+  dx_ = K * residual;
+
+  // Update nominal state
+  Update();
+
+  // Covariance update: P = (I - K * H) * P
+  P_ = P_ - K * H_pose * P_.template block<6, 18>(0, 0);
+
+  // Project covariance for rotation
+  M3 J_theta = M3::Identity() - 0.5 * SO3::hat(dx_.template block<3, 1>(0, 0));
+  M18 P_proj = P_;
+  for (int j = 0; j < STATE_DIM; j += 3) {
+    P_proj.block<3, 3>(0, j).noalias() = J_theta * P_.block<3, 3>(0, j);
+  }
+  for (int j = 0; j < STATE_DIM; j += 3) {
+    P_proj.block<3, 3>(j, 0) = P_proj.block<3, 3>(j, 0) * J_theta.transpose();
+  }
+  P_ = P_proj;
+
+  dx_.setZero();
   return true;
 }
 

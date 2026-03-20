@@ -4,6 +4,7 @@
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <filesystem>
 
 #include "lio/super_lio.h"
 #include "lio/params.h"
@@ -13,6 +14,8 @@
 
 DEFINE_string(input_bag, "", "Input ROS2 bag path");
 DEFINE_string(config, "", "Config YAML file path");
+DEFINE_string(output_dir, ".", "Output directory for trajectory and map");
+DEFINE_string(trajectory_file, "trajectory.txt", "Trajectory output filename");
 
 using namespace LI2Sup;
 
@@ -79,6 +82,9 @@ void LoadParamsFromYaml(const std::string& config_path) {
     g_kf_max_iterations = yaml.GetValue<int>("lio", "kf", "kf_max_iterations");
     g_kf_align_gravity = yaml.GetValue<bool>("lio", "kf", "kf_align_gravity");
     g_kf_quit_eps = yaml.GetValue<double>("lio", "kf", "kf_quit_eps");
+    g_kf_point_update = yaml.GetValue<bool>("lio", "kf", "point_update");
+
+    LOG(INFO) << " ---> [Param] g_kf_point_update: " << (g_kf_point_update ? "true" : "false");
 
     // Output
     g_2_robot = yaml.GetValue<bool>("lio", "output", "robot");
@@ -103,7 +109,7 @@ int main(int argc, char** argv) {
     google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (FLAGS_input_bag.empty()) {
-        LOG(ERROR) << "Usage: run_offline --input_bag=<bag_path> --config=<config.yaml>";
+        LOG(ERROR) << "Usage: run_offline --input_bag=<bag_path> --config=<config.yaml> --output_dir=<output_dir>";
         return -1;
     }
 
@@ -112,8 +118,15 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+    // Create output directory if not exists
+    std::filesystem::create_directories(FLAGS_output_dir);
+
     // Load parameters
     LoadParamsFromYaml(FLAGS_config);
+
+    // Override save_map_dir with output_dir
+    g_save_map_dir = FLAGS_output_dir;
+    g_save_map = true;  // Always save map in offline mode
 
     // Create offline wrapper
     auto wrapper = std::make_shared<OfflineWrapper>();
@@ -126,6 +139,8 @@ int main(int argc, char** argv) {
     LOG(INFO) << "Starting offline processing...";
     LOG(INFO) << "  Bag: " << FLAGS_input_bag;
     LOG(INFO) << "  Config: " << FLAGS_config;
+    LOG(INFO) << "  Output dir: " << FLAGS_output_dir;
+    LOG(INFO) << "  Trajectory file: " << FLAGS_trajectory_file;
     LOG(INFO) << "  Lidar topic: " << g_lidar_topic;
     LOG(INFO) << "  IMU topic: " << g_imu_topic;
 
@@ -159,16 +174,19 @@ int main(int argc, char** argv) {
     // Process bag
     rosbag.Go();
 
-    // Save map if needed
+    // Save map
     slam.saveMap();
 
     // Save trajectory
-    wrapper->saveTrajectory("trajectory.txt");
+    std::string traj_path = FLAGS_output_dir + "/" + FLAGS_trajectory_file;
+    wrapper->saveTrajectory(traj_path);
 
     // Print timing info
     slam.printTimeRecord();
 
     LOG(INFO) << "Offline processing completed.";
+    LOG(INFO) << "  Trajectory: " << traj_path;
+    LOG(INFO) << "  Map: " << g_save_map_dir << "/" << g_map_name;
 
     return 0;
 }

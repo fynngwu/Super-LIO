@@ -143,6 +143,125 @@ lio:
 # ---> Trajectory saved to: trajectory.txt (1167 poses)
 ```
 
+### Point-wise Update Mode
+
+Super-LIO supports two Kalman Filter update modes:
+- **Batch update (default)**: `point_update: false` - All points in a scan are processed together
+- **Sequential point-wise update**: `point_update: true` - Each point is used to update the state sequentially
+
+The point-wise mode can provide more accurate results in certain scenarios but is computationally more expensive.
+
+```yaml
+lio:
+  kf:
+    kf_type: 0
+    kf_max_iterations: 4
+    kf_align_gravity: true
+    kf_quit_eps: 0.001
+    point_update: false  # true=sequential point-wise, false=batch
+```
+
+### Testing Scripts
+
+Super-LIO provides testing scripts for running experiments with different parameter combinations.
+
+#### Quick Test (run_test.sh)
+
+Runs 2 quick experiments comparing `point_update=true` vs `point_update=false`:
+
+```bash
+cd Super-LIO/src/offline
+./scripts/run_test.sh
+```
+
+**Output:**
+```
+========================================
+Super-LIO 快速测试脚本
+========================================
+数据集: /home/wufy/git_resp/ros2_ws/src/court1-ros2bag
+...
+实验 1: point_update=true
+输出目录: experiment_results/exp_1_putrue_vs0.5_ki4
+...
+实验 2: point_update=false
+输出目录: experiment_results/exp_2_pufalse_vs0.5_ki4
+...
+测试完成！
+```
+
+Each experiment generates:
+- `config.yaml` - Configuration used
+- `params.txt` - Parameter summary
+- `run.log` - Execution log
+- `trajectory.txt` - Output trajectory (TUM format)
+
+#### Orthogonal Experiments (run_experiments.sh)
+
+Runs a full grid of parameter combinations for systematic evaluation:
+
+```bash
+cd Super-LIO/src/offline
+# Full factorial (18 combinations)
+./scripts/run_experiments.sh --full
+
+# Quick mode (2 combinations)
+./scripts/run_experiments.sh --quick
+
+# Custom bag path
+./scripts/run_experiments.sh --bag=/path/to/bag --full
+```
+
+**Parameters tested:**
+- `point_update`: true, false
+- `voxel_fliter_size`: 0.3, 0.5, 0.7 (--full mode)
+- `kf_max_iterations`: 2, 4, 6 (--full mode)
+
+**Output structure:**
+```
+experiment_results/
+├── exp_1_putrue_vs0.5_ki4/
+│   ├── config.yaml
+│   ├── params.txt
+│   ├── run.log
+│   ├── trajectory.txt
+│   └── trajectory_plot.png
+├── exp_2_pufalse_vs0.5_ki4/
+│   └── ...
+├── summary.txt          # Summary of all experiments
+└── comparison_plot.png   # Compare results
+```
+
+#### Analysis Script (analyze_results.py)
+
+Analyzes experimental results and generates visualizations:
+
+```bash
+# Analyze single experiment
+python3 scripts/analyze_results.py experiment_results/exp_1_putrue_vs0.5_ki4
+
+# Compare all experiments in a directory
+python3 scripts/analyze_results.py experiment_results
+```
+
+**Output includes:**
+- Trajectory statistics (total distance, duration, avg/max speed)
+- Time performance breakdown (Observe, DownSample, Undistort, UpdateMap)
+- 3D trajectory plots
+- Speed distribution plots
+- Comparison bar charts between experiments
+
+```
+============================================================
+实验对比表格
+============================================================
+
+实验名称                          Observe(ms)  point_update  距离(m)     时间(s)
+--------------------------------------------------------------------------------
+exp_1_putrue_vs0.5_ki4            12.345       true           523.45     120.67
+exp_2_pufalse_vs0.5_ki4          8.234        false          521.89     118.45
+```
+
 ## Datasets
 <p align="center">
   <img src="docs/datasets_compressed.png" width="95%">

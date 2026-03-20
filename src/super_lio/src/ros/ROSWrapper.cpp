@@ -142,6 +142,9 @@ void LoadParamFromRos(rclcpp::Node& node)
   node.declare_parameter<double>("lio.kf.kf_quit_eps", 0.0);
   node.get_parameter("lio.kf.kf_quit_eps", g_kf_quit_eps);
 
+  node.declare_parameter<bool>("lio.kf.point_update", false);
+  node.get_parameter("lio.kf.point_update", g_kf_point_update);
+
   // submaps
   node.declare_parameter<double>("lio.submap.submap_resolution", 0.0);
   node.get_parameter("lio.submap.submap_resolution", g_submap_resolution);

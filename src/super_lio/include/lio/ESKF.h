@@ -57,6 +57,9 @@ public:
   using ObsFunc = std::function<void(const KFState& kf_state, BASIC::M6& HT_Vinv_H, BASIC::V6& HT_Vinv_r)>;
   bool UpdateObserve(ObsFunc obs);
 
+  // Single point pose update for sequential EKF, noise_var = 0.001
+  bool UpdatePointPoseOnly(const Eigen::Matrix<BASIC::scalar, 1, 6>& H_pose, const BASIC::scalar residual);
+
   double GetTime() const { return current_time_; }
 
   SysState GetSysState() const { return SysState(current_time_, R_, p_, v_, bg_, ba_); }

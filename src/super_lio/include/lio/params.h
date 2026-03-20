@@ -68,6 +68,7 @@ namespace LI2Sup{
   extern int g_kf_max_iterations;
   extern bool g_kf_align_gravity;
   extern double g_kf_quit_eps;
+  extern bool g_kf_point_update;   // true: sequential point-wise update, false: batch update
 
   /// submaps
   extern double g_submap_resolution;

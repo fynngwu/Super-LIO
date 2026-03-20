@@ -78,7 +78,7 @@ protected:
   ESKF::Ptr kf_;
   OctVoxMapType::Ptr ivox_;
   VoxelGridClosest<BASIC::PointType> voxel_grid_fliter_;
-  
+
 #ifdef USE_ROS_WRAPPER
   ROSWrapper::Ptr data_wrapper_;
 #else

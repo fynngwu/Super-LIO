@@ -440,13 +440,14 @@ struct ThreadACC{
 
 void SuperLIO::Observe(){
   size_t ptsize = ds_undistort_->size();
-  
+  if (ptsize == 0) {
+    kf_->SetLastObsTime(measures_.lidar.end_time);
+    return;
+  }
+
   static std::vector<float> _lengths;
   points_body_v3_.resize(ptsize);
   _lengths.resize(ptsize);
-
-  effect_knn_num_ = ptsize;
-  std::iota(effect_knn_idxs_.begin(), effect_knn_idxs_.begin() + ptsize, 0);
 
   for(size_t i = 0; i < ptsize; ++i){
     const auto& point_body_pcl = ds_undistort_->points[i];
@@ -455,6 +456,59 @@ void SuperLIO::Observe(){
   }
 
   ivox_->reset_max_group();
+
+  // Sequential point-wise update
+  if (g_kf_point_update) {
+    points_world_v3_.resize(ptsize);
+    int effect_point_num = 0;
+
+    for (size_t i = 0; i < ptsize; ++i) {
+      const V3& point_body = points_body_v3_[i];
+      SE3 pose = kf_->GetSE3();
+      V3 point_world = pose * point_body;
+
+      KNNHeapType top_K;
+      top_K.reset();
+      ivox_->getTopK(point_world, top_K);
+
+      if (top_K.count >= 4) {
+        std::array<double, 4> abcd;
+        if (calc_plane_coeff(top_K.count, top_K.points_, abcd)) {
+          scalar error = 0.0;
+          if (compute_error(abcd, point_world, _lengths[i], error)) {
+            V3d normvec(abcd[0], abcd[1], abcd[2]);
+            V3d nb = pose.R_.transpose().cast<double>() * normvec;
+            V3d point_body_d = point_body.cast<double>();
+
+            Eigen::Matrix<scalar, 1, 6> H_pose;
+            H_pose.template block<1, 3>(0, 0) = point_body_d.cross(nb).transpose().template cast<scalar>();
+            H_pose.template block<1, 3>(0, 3) = normvec.transpose().template cast<scalar>();
+
+            kf_->UpdatePointPoseOnly(H_pose, -error);
+            effect_point_num++;
+          }
+        }
+      }
+
+      // Transform point to world frame with updated pose
+      points_world_v3_[i] = kf_->GetSE3() * point_body;
+    }
+
+    // Log every 100 frames
+    static int log_counter = 0;
+    if (++log_counter >= 100) {
+      LOG(INFO) << "[Point-wise] ptsize: " << ptsize << ", effect: " << effect_point_num;
+      log_counter = 0;
+    }
+
+    kf_->SetLastObsTime(measures_.lidar.end_time);
+    return;
+  }
+
+  // Batch update (original)
+  effect_knn_num_ = ptsize;
+  std::iota(effect_knn_idxs_.begin(), effect_knn_idxs_.begin() + ptsize, 0);
+
   int iter_num = 0;
 
   kf_->UpdateObserve([&, this](const ESKF::KFState &kf_state, M6 &HTVH, V6 &HTVr) {
@@ -492,7 +546,7 @@ void SuperLIO::Observe(){
           scalar error;
           effect_mask_[idx] = compute_error(abcd, point_world, _lengths[idx], error);
           if(!effect_mask_[idx]) continue;
-          
+
           {
             V3d normvec(abcd[0], abcd[1], abcd[2]);
             V3d nb = R_transpose * normvec;
@@ -500,7 +554,7 @@ void SuperLIO::Observe(){
             V6d J;
             J.head<3>() = point_body_d.cross(nb);
             J.tail<3>() = normvec;
-      
+
             local_acc.HTVH += J * 1000 * J.transpose();
             local_acc.HTVr -= J * 1000 * error;
           }
@@ -526,7 +580,6 @@ void SuperLIO::Observe(){
       _effect_knn_num++;
     }
 
-    // LOG(INFO) << "effect_knn_num_: " << effect_knn_num_ << ", _effect_knn_num: " << _effect_knn_num;
     effect_knn_num_ = _effect_knn_num;
 
     iter_num++;
@@ -539,20 +592,22 @@ void SuperLIO::Observe(){
 void SuperLIO::UpdateMap() {
   const size_t ptsize = ds_undistort_->size();
   if (ptsize == 0) return;
-  
-  last_pose_ = kf_->GetSE3();
-  points_world_v3_.resize(ptsize);
-  
-  const auto R = last_pose_.R_;
-  const auto t = last_pose_.t_;
-  
-  for (size_t i = 0; i < ptsize; ++i) {
-    const auto& pt = points_body_v3_[i];
-    points_world_v3_[i] = R * pt + t;
-  }
-  
-  ivox_->insert(points_world_v3_);
 
+  last_pose_ = kf_->GetSE3();
+
+  // In point-wise update mode, points_world_v3_ is already computed in Observe()
+  if (!g_kf_point_update) {
+    points_world_v3_.resize(ptsize);
+    const auto R = last_pose_.R_;
+    const auto t = last_pose_.t_;
+
+    for (size_t i = 0; i < ptsize; ++i) {
+      const auto& pt = points_body_v3_[i];
+      points_world_v3_[i] = R * pt + t;
+    }
+  }
+
+  ivox_->insert(points_world_v3_);
 }
 
 
